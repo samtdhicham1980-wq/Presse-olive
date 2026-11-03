@@ -1461,34 +1461,34 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Split Workspace: Left Deep-Olive Sidebar + Right Cream/White Viewport */}
-      <div className="no-print flex flex-1 flex-col lg:flex-row">
-        {/* 1. Barre latérale (Sidebar) à gauche */}
-        <aside className="flex w-full flex-col justify-between bg-gradient-to-b from-[#2E3B1F] to-[#232E17] text-white lg:w-[250px] lg:shrink-0">
+      {/* Main Split Workspace: Permanent Left Deep-Olive Sidebar + Right Cream/White Viewport */}
+      <div className="no-print flex flex-1 flex-row min-h-[calc(100vh-2rem)]">
+        {/* 1. Barre latérale (Sidebar) fixe à gauche */}
+        <aside className="flex w-[220px] sm:w-[250px] shrink-0 flex-col justify-between bg-gradient-to-b from-[#2E3B1F] to-[#232E17] text-white border-r border-[#1D2613]">
           <div>
             {/* Brand Header inside Sidebar */}
-            <div className="flex items-center gap-3.5 px-6 pt-6 pb-5">
-              <OliveBranchIllustration className="h-12 w-12 shrink-0" />
-              <div>
-                <div className="font-display text-xl font-bold tracking-tight text-white">
+            <div className="flex items-center gap-3 px-5 pt-6 pb-5">
+              <OliveBranchIllustration className="h-11 w-11 shrink-0" />
+              <div className="min-w-0">
+                <div className="font-display text-lg sm:text-xl font-bold tracking-tight text-white truncate">
                   {settings.millTitle || 'معصرة الصغير'}
                 </div>
-                <div className="mt-0.5 text-xs leading-snug text-[#B2BEA0]">
+                <div className="mt-0.5 text-[11px] sm:text-xs leading-snug text-[#B2BEA0]">
                   Gestion de votre moulin
                   <br />à huile d’olive
                 </div>
               </div>
             </div>
 
-            {/* Menu de navigation complet (9 items) */}
-            <nav className="flex flex-row gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:px-3.5 lg:pb-6">
+            {/* Menu de navigation vertical à gauche (9 items) */}
+            <nav className="flex flex-col gap-1 px-3.5 pb-6">
               {navItems.map((item) => {
                 const isActive = activeTab === item.id;
                 return (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center gap-3.5 rounded-xl px-4 py-2.5 text-left text-sm transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`flex w-full items-center gap-3.5 rounded-xl px-4 py-2.5 text-left text-sm transition-all whitespace-nowrap cursor-pointer ${
                       isActive
                         ? 'bg-[#566739] font-semibold text-white shadow-sm ring-1 ring-[#71844E]/50'
                         : 'font-medium text-[#CDD6BE] hover:bg-[#384726] hover:text-white'
@@ -1503,7 +1503,7 @@ export default function App() {
           </div>
 
           {/* En bas de la barre latérale : icône d'olive + mention textuelle */}
-          <div className="hidden border-t border-[#3A4928] px-5 py-5 lg:flex lg:items-center lg:gap-3">
+          <div className="flex items-center gap-3 border-t border-[#3A4928] px-5 py-5">
             <OliveBranchIllustration className="h-8 w-8 shrink-0 opacity-85" />
             <p className="text-xs italic leading-relaxed text-[#A3B18E]">
               Une huile d’exception
@@ -1514,7 +1514,7 @@ export default function App() {
         </aside>
 
         {/* Right Main Content Area */}
-        <div className="flex-1 flex flex-col bg-[#F7F7F3] min-w-0">
+        <div className="flex-1 flex flex-col bg-[#F7F7F3] min-w-0 overflow-x-hidden">
           {/* 2. En-tête (Header) */}
           <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#E6E7E0] bg-white px-6 py-4">
             {/* Titre principal à gauche */}
