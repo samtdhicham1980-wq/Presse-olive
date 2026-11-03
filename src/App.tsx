@@ -30,7 +30,23 @@ import {
   User,
   Minus,
   Square,
+  Lock,
+  LogOut,
+  Eye,
+  EyeOff,
+  KeyRound,
+  TrendingUp,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 import {
   SectionTab,
   CurrencyCode,
@@ -240,28 +256,81 @@ export default function App() {
     adminRole: string;
     currency: CurrencyCode;
     defaultRatePerKg: string;
+    username?: string;
+    password?: string;
   }>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      return saved
-        ? JSON.parse(saved)
-        : {
-            millTitle: 'Ma Presse',
-            adminName: 'Karim',
-            adminRole: 'Administrateur',
-            currency: 'DT',
-            defaultRatePerKg: '0.20',
-          };
-    } catch {
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          millTitle:
+            !parsed.millTitle || parsed.millTitle === 'Ma Presse'
+              ? 'معصرة الصغير'
+              : parsed.millTitle,
+          adminName: parsed.adminName || 'Karim',
+          adminRole: parsed.adminRole || 'Administrateur',
+          currency: parsed.currency || 'DT',
+          defaultRatePerKg: parsed.defaultRatePerKg || '0.20',
+          username: parsed.username || 'karim',
+          password: parsed.password || '1234',
+        };
+      }
       return {
-        millTitle: 'Ma Presse',
+        millTitle: 'معصرة الصغير',
         adminName: 'Karim',
         adminRole: 'Administrateur',
         currency: 'DT',
         defaultRatePerKg: '0.20',
+        username: 'karim',
+        password: '1234',
+      };
+    } catch {
+      return {
+        millTitle: 'معصرة الصغير',
+        adminName: 'Karim',
+        adminRole: 'Administrateur',
+        currency: 'DT',
+        defaultRatePerKg: '0.20',
+        username: 'karim',
+        password: '1234',
       };
     }
   });
+
+  // Authentication State (shown on site open)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [loginUsername, setLoginUsername] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [loginError, setLoginError] = useState<string>('');
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const enteredUser = loginUsername.trim().toLowerCase();
+    const enteredPass = loginPassword.trim();
+    const expectedUser = (settings.username || 'karim').trim().toLowerCase();
+    const expectedPass = (settings.password || '1234').trim();
+
+    const isValidCustom = enteredUser === expectedUser && enteredPass === expectedPass;
+    const isValidDefault =
+      (enteredUser === 'karim' || enteredUser === 'admin') &&
+      (enteredPass === '1234' || enteredPass === 'admin');
+
+    if (isValidCustom || isValidDefault) {
+      setLoginError('');
+      setIsAuthenticated(true);
+    } else {
+      setLoginError('Nom d’utilisateur ou mot de passe incorrect.');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsProfileMenuOpen(false);
+    setLoginPassword('');
+    setLoginError('');
+    setIsAuthenticated(false);
+  };
 
   const currency = settings.currency;
 
@@ -517,6 +586,85 @@ export default function App() {
       totalPomaceKg,
     };
   }, [apports, proClients, resellers, passengers, pomaceLots]);
+
+  // Daily revenue for the last 7 days ending on headerDate (for Recharts LineChart in Rapports)
+  const [chartMetricMode, setChartMetricMode] = useState<'all' | 'pressage'>('pressage');
+
+  const last7DaysRevenue = useMemo(() => {
+    const baseParts = headerDate.split('-').map(Number);
+    const baseDate =
+      baseParts.length === 3 && !baseParts.some(isNaN)
+        ? new Date(baseParts[0], baseParts[1] - 1, baseParts[2])
+        : new Date(2026, 10, 3);
+
+    const shortMonths = [
+      'janv.',
+      'févr.',
+      'mars',
+      'avr.',
+      'mai',
+      'juin',
+      'juil.',
+      'août',
+      'sept.',
+      'oct.',
+      'nov.',
+      'déc.',
+    ];
+
+    const days: Array<{
+      dateIso: string;
+      label: string;
+      recettesPressage: number;
+      ventesHuileGrignon: number;
+      recettesTotales: number;
+    }> = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(baseDate);
+      d.setDate(baseDate.getDate() - i);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const iso = `${yyyy}-${mm}-${dd}`;
+      const label = `${d.getDate()} ${shortMonths[d.getMonth()]}`;
+
+      const dayApportsRev = apports
+        .filter((a) => a.date === iso)
+        .reduce((sum, a) => sum + a.totalAmount, 0);
+
+      const dayProRev = proClients
+        .filter((c) => c.date === iso)
+        .reduce((sum, c) => sum + c.oliveTonnage * 1000 * c.pressPricePerKg, 0);
+
+      const dayPassengerOilRev = passengers
+        .filter((p) => p.date === iso && p.oilPurchasedLiters > 0)
+        .reduce((sum, p) => sum + p.oilPurchasedLiters * 25, 0);
+
+      const dayResellerRev = resellers
+        .filter((r) => r.date === iso)
+        .reduce((sum, r) => sum + r.totalAmount, 0);
+
+      const dayPomaceRev = pomaceLots
+        .filter((g) => g.date === iso && g.destination === 'Vendu')
+        .reduce((sum, g) => sum + g.salePriceDh, 0);
+
+      const recettesPressage = Math.round((dayApportsRev + dayProRev) * 100) / 100;
+      const ventesHuileGrignon =
+        Math.round((dayResellerRev + dayPassengerOilRev + dayPomaceRev) * 100) / 100;
+      const recettesTotales = Math.round((recettesPressage + ventesHuileGrignon) * 100) / 100;
+
+      days.push({
+        dateIso: iso,
+        label,
+        recettesPressage,
+        ventesHuileGrignon,
+        recettesTotales,
+      });
+    }
+
+    return days;
+  }, [headerDate, apports, proClients, passengers, resellers, pomaceLots]);
 
   // Handler: Enregistrer l'apport from Dashboard Card
   const handleRecordApport = (e: React.FormEvent) => {
@@ -1095,6 +1243,184 @@ export default function App() {
     parametres: 'Paramètres du Moulin',
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#F5F5F0] text-[#22261E] select-none sm:select-auto">
+        {/* Top Window Title Bar */}
+        <div className="flex h-8 items-center justify-between bg-[#253019] px-3.5 text-xs text-[#D5DEC6] border-b border-[#1D2613]">
+          <div className="flex items-center gap-2">
+            <OliveMiniIcon className="h-4 w-4 text-[#B4C284]" />
+            <span className="font-semibold tracking-wide text-white">{settings.millTitle}</span>
+            <span className="text-[11px] text-[#95A37F]">v1.0.0 — Portail d’accès sécurisé</span>
+            {!isOnline && (
+              <span className="ml-2 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                Mode Hors-Ligne Actif
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2.5 text-[#95A37F]">
+            <Minus className="h-3 w-3 opacity-70" />
+            <Square className="h-2.5 w-2.5 opacity-70" />
+            <X className="h-3.5 w-3.5 opacity-70" />
+          </div>
+        </div>
+
+        {/* Centered Login Split Card */}
+        <div className="flex flex-1 items-center justify-center p-4 sm:p-6">
+          <div className="grid w-full max-w-4xl grid-cols-1 overflow-hidden rounded-3xl border border-[#DFEAD6] bg-white shadow-xl lg:grid-cols-12">
+            {/* Left Olive Brand Panel */}
+            <div className="flex flex-col justify-between bg-gradient-to-b from-[#2E3B1F] to-[#232E17] p-8 text-white lg:col-span-5">
+              <div>
+                <div className="flex items-center gap-3.5">
+                  <OliveBranchIllustration className="h-14 w-14 shrink-0" />
+                  <div>
+                    <h1 className="font-display text-2xl font-bold tracking-tight text-white">
+                      {settings.millTitle}
+                    </h1>
+                    <p className="mt-0.5 text-xs leading-snug text-[#B2BEA0]">
+                      Maâsra Al Baraka — Gestion de votre moulin à huile d’olive
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-8 space-y-3 border-t border-[#3A4928] pt-6 text-xs text-[#CDD6BE]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full bg-[#B4C284]" />
+                    <span>Suivi des apports d’olives & tickets de pesée</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full bg-[#B4C284]" />
+                    <span>Gestion des pressages, rendez-vous & clients pro</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full bg-[#B4C284]" />
+                    <span>Ventes d’huile en gros, stock grignon & paiements</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex items-center gap-3 border-t border-[#3A4928] pt-5">
+                <OliveBranchIllustration className="h-8 w-8 shrink-0 opacity-85" />
+                <p className="text-xs italic leading-relaxed text-[#A3B18E]">
+                  Une huile d’exception
+                  <br />
+                  par un savoir-faire local
+                </p>
+              </div>
+            </div>
+
+            {/* Right Login Form Panel */}
+            <div className="flex flex-col justify-center p-8 sm:p-10 lg:col-span-7">
+              <div className="mb-6">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#F1F6EC] px-3 py-1 text-xs font-semibold text-[#3B5224] border border-[#DFEAD6]">
+                  <Lock className="h-3.5 w-3.5" />
+                  Authentification requise
+                </div>
+                <h2 className="mt-3 font-display text-2xl font-bold text-[#1E2418]">
+                  Connexion à votre espace
+                </h2>
+                <p className="mt-1 text-xs text-[#6E7464]">
+                  Veuillez saisir votre nom d’utilisateur et votre mot de passe pour accéder au tableau de bord.
+                </p>
+              </div>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#454C3E]">
+                    Nom d’utilisateur
+                  </label>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8C9282]" />
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      value={loginUsername}
+                      onChange={(e) => {
+                        setLoginUsername(e.target.value);
+                        if (loginError) setLoginError('');
+                      }}
+                      placeholder="Ex: karim ou admin"
+                      className="w-full rounded-xl border border-[#DCDFD5] bg-[#FAFAF7] py-2.5 pl-10 pr-4 text-sm text-[#1E2418] placeholder:text-[#9AA090] focus:border-[#566739] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#454C3E]">
+                    Mot de passe
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8C9282]" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={loginPassword}
+                      onChange={(e) => {
+                        setLoginPassword(e.target.value);
+                        if (loginError) setLoginError('');
+                      }}
+                      placeholder="••••••••"
+                      className="w-full rounded-xl border border-[#DCDFD5] bg-[#FAFAF7] py-2.5 pl-10 pr-10 text-sm text-[#1E2418] placeholder:text-[#9AA090] focus:border-[#566739] focus:bg-white focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8C9282] hover:text-[#22261E] cursor-pointer"
+                      title={showPassword ? 'Masquer' : 'Afficher'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {loginError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
+                    {loginError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#526134] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#44522A] transition-colors cursor-pointer"
+                >
+                  <Lock className="h-4 w-4" />
+                  Se connecter au moulin
+                </button>
+              </form>
+
+              {/* Quick Demo Credentials Helper */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#EAE6D7] bg-[#F6F4EC] px-4 py-3 text-xs text-[#5A5648]">
+                <div>
+                  <span className="font-semibold text-[#1E2418]">Accès Administrateur :</span>{' '}
+                  Utilisateur <code className="font-mono font-bold text-[#3B5224]">{settings.username || 'karim'}</code> • Mot de passe{' '}
+                  <code className="font-mono font-bold text-[#3B5224]">{settings.password || '1234'}</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginUsername(settings.username || 'karim');
+                    setLoginPassword(settings.password || '1234');
+                    setLoginError('');
+                  }}
+                  className="rounded-lg bg-white px-2.5 py-1 text-[11px] font-semibold text-[#526134] border border-[#DCDFD5] hover:bg-[#F1F6EC] cursor-pointer"
+                >
+                  Remplir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <OfflineIndicator />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F5F5F0] text-[#22261E] select-none sm:select-auto">
       {/* Top Window Title Bar matching "Ma Presse v1.0.0" */}
@@ -1145,7 +1471,7 @@ export default function App() {
               <OliveBranchIllustration className="h-12 w-12 shrink-0" />
               <div>
                 <div className="font-display text-xl font-bold tracking-tight text-white">
-                  {settings.millTitle}
+                  {settings.millTitle || 'معصرة الصغير'}
                 </div>
                 <div className="mt-0.5 text-xs leading-snug text-[#B2BEA0]">
                   Gestion de votre moulin
@@ -1296,6 +1622,15 @@ export default function App() {
                     >
                       <Download className="h-3.5 w-3.5 text-[#566739]" />
                       Exporter toutes les données
+                    </button>
+                    <div className="my-1 border-t border-[#E6E7E0]" />
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-[#9C4221] hover:bg-[#FCF3EE] cursor-pointer"
+                    >
+                      <LogOut className="h-3.5 w-3.5" />
+                      Se déconnecter
                     </button>
                   </div>
                 )}
@@ -2621,6 +2956,143 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Graphique linéaire Recharts : Recettes quotidiennes des 7 derniers jours */}
+                <div className="rounded-2xl border border-[#E5E6DF] bg-[#FAFAF7] p-5">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E3ECD8] text-[#3B5224]">
+                        <TrendingUp className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-display text-base font-bold text-[#1E2418]">
+                          Évolution des Recettes Quotidiennes (7 derniers jours)
+                        </h3>
+                        <p className="text-xs text-[#6E7464]">
+                          Période du {last7DaysRevenue[0]?.label} au{' '}
+                          {last7DaysRevenue[last7DaysRevenue.length - 1]?.label} ({currency})
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="inline-flex rounded-xl border border-[#DCDFD5] bg-white p-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setChartMetricMode('pressage')}
+                        className={`rounded-lg px-3 py-1.5 font-medium transition-colors cursor-pointer ${
+                          chartMetricMode === 'pressage'
+                            ? 'bg-[#526134] text-white'
+                            : 'text-[#5A6250] hover:bg-[#F2F3EE]'
+                        }`}
+                      >
+                        Recettes Pressage
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChartMetricMode('all')}
+                        className={`rounded-lg px-3 py-1.5 font-medium transition-colors cursor-pointer ${
+                          chartMetricMode === 'all'
+                            ? 'bg-[#526134] text-white'
+                            : 'text-[#5A6250] hover:bg-[#F2F3EE]'
+                        }`}
+                      >
+                        Toutes les Recettes (Pressage + Ventes)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-[320px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={last7DaysRevenue}
+                        margin={{ top: 12, right: 24, left: 10, bottom: 8 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E6DF" vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fill: '#5A6250', fontSize: 12 }}
+                          axisLine={{ stroke: '#DCDFD5' }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fill: '#5A6250', fontSize: 12 }}
+                          axisLine={false}
+                          tickLine={false}
+                          tickFormatter={(val: number) => `${formatNumber(val, 0)} ${currency}`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#FFFFFF',
+                            borderColor: '#DCDFD5',
+                            borderRadius: '12px',
+                            boxShadow: '0 8px 20px rgba(30,36,24,0.08)',
+                            fontSize: '12px',
+                          }}
+                          formatter={(value: any, name: any) => [
+                            formatDh(Number(value) || 0, currency),
+                            String(name),
+                          ]}
+                          labelStyle={{ fontWeight: 700, color: '#1E2418', marginBottom: '4px' }}
+                        />
+                        <Legend
+                          wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }}
+                          iconType="circle"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="recettesPressage"
+                          name={`Recettes Pressage (${currency})`}
+                          stroke="#526134"
+                          strokeWidth={3}
+                          dot={{ r: 4, fill: '#526134', strokeWidth: 2, stroke: '#FFFFFF' }}
+                          activeDot={{ r: 6, fill: '#2E3B1F' }}
+                        />
+                        {chartMetricMode === 'all' && (
+                          <>
+                            <Line
+                              type="monotone"
+                              dataKey="ventesHuileGrignon"
+                              name={`Ventes Huile & Grignon (${currency})`}
+                              stroke="#C89D3C"
+                              strokeWidth={2.5}
+                              dot={{ r: 4, fill: '#C89D3C', strokeWidth: 2, stroke: '#FFFFFF' }}
+                              activeDot={{ r: 6, fill: '#9A7420' }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="recettesTotales"
+                              name={`Recettes Totales (${currency})`}
+                              stroke="#2E3B1F"
+                              strokeWidth={2.5}
+                              strokeDasharray="5 5"
+                              dot={{ r: 4, fill: '#2E3B1F', strokeWidth: 2, stroke: '#FFFFFF' }}
+                            />
+                          </>
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Mini synthèse quotidienne sur 7 jours */}
+                  <div className="mt-4 grid grid-cols-2 gap-2 border-t border-[#E6E7E0] pt-4 sm:grid-cols-7">
+                    {last7DaysRevenue.map((day) => (
+                      <div
+                        key={day.dateIso}
+                        className="rounded-xl border border-[#E6E7E0] bg-white px-3 py-2 text-center"
+                      >
+                        <div className="text-[11px] font-medium text-[#6E7464]">{day.label}</div>
+                        <div className="mt-0.5 font-mono text-xs font-bold text-[#3B5224]">
+                          {formatDh(
+                            chartMetricMode === 'pressage'
+                              ? day.recettesPressage
+                              : day.recettesTotales,
+                            currency
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-[#E6E7E0] pt-5">
                   <button
                     onClick={() =>
@@ -2709,6 +3181,30 @@ export default function App() {
                         setSettings({ ...settings, defaultRatePerKg: e.target.value });
                         setApportRatePerKg(e.target.value);
                       }}
+                      className="w-full rounded-lg border border-[#DCDFD5] px-3.5 py-2 font-mono text-sm text-[#1E2418]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[#3A4034]">
+                      Nom d’utilisateur de connexion
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.username || 'karim'}
+                      onChange={(e) => setSettings({ ...settings, username: e.target.value })}
+                      className="w-full rounded-lg border border-[#DCDFD5] px-3.5 py-2 font-mono text-sm text-[#1E2418]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-[#3A4034]">
+                      Mot de passe d’accès
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.password || '1234'}
+                      onChange={(e) => setSettings({ ...settings, password: e.target.value })}
                       className="w-full rounded-lg border border-[#DCDFD5] px-3.5 py-2 font-mono text-sm text-[#1E2418]"
                     />
                   </div>
