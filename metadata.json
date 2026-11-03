@@ -1,0 +1,6 @@
+{
+  "name": "Maâsra Al Baraka — Gestion d'Huilerie",
+  "description": "Application professionnelle de gestion pour huilerie et presse d'olive : suivi des clients professionnels, revendeurs d'huile, clients passagers et sous-produits (grignon) avec mode hors-ligne.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
